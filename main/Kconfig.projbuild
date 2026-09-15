@@ -1,0 +1,67 @@
+menu "Application Configuration"
+
+    config APP_SYSTEM_NAME
+        string "System name"
+        default "esp32ledctl"
+        help
+            Single identity used for the BLE provisioning advertisement/device
+            name, the mDNS hostname (<system_name>.local) and the web UI title.
+
+    config APP_RGB_GPIO
+        int "RGB LED data GPIO"
+        default 48
+        help
+            GPIO connected to the on-board addressable RGB LED. Common values
+            are 48 (ESP32-S3-DevKitC-1 v1.1) and 38 (v1.0).
+
+    config APP_BOOT_GPIO
+        int "BOOT button GPIO"
+        default 0
+
+    config APP_HTTP_PORT
+        int "HTTP server port"
+        default 80
+        range 1 65535
+
+    config APP_NTP_SERVER
+        string "NTP server"
+        default "pool.ntp.org"
+
+    config APP_TIMEZONE
+        string "POSIX timezone string"
+        default "UTC0"
+
+    config APP_LED_TICK_MS
+        int "LED render tick in milliseconds"
+        default 20
+        range 5 1000
+
+    config APP_BUTTON_DEBOUNCE_MS
+        int "Button debounce in milliseconds"
+        default 50
+
+    config APP_BUTTON_LONGPRESS_MS
+        int "Button long-press threshold in milliseconds"
+        default 5000
+
+    config APP_TASK_CORE_PROV
+        int "Provisioning task core"
+        default 0
+        range 0 1
+
+    config APP_TASK_CORE_NET
+        int "Network task core"
+        default 0
+        range 0 1
+
+    config APP_TASK_CORE_LED
+        int "LED task core"
+        default 1
+        range 0 1
+
+    config APP_TASK_CORE_BUTTON
+        int "Button task core"
+        default 1
+        range 0 1
+
+endmenu

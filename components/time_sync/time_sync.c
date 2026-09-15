@@ -1,0 +1,94 @@
+#include "time_sync.h"
+
+#include <stdlib.h>
+#include <time.h>
+
+#include "esp_log.h"
+#include "esp_netif_sntp.h"
+#include "freertos/FreeRTOS.h"
+#include "time_format.h"
+
+static const char *TAG = "time_sync";
+
+static bool s_synced;
+static bool s_started;
+
+/**
+ * @brief SNTP synchronization callback.
+ *
+ * @param tv  Updated time, unused.
+ */
+static void
+time_sync_on_sync (struct timeval *tv)
+{
+    (void)tv;
+    s_synced = true;
+    ESP_LOGI (TAG, "time synchronized");
+}
+
+esp_err_t
+time_sync_start (const char *server, const char *timezone)
+{
+    if (timezone != NULL)
+        {
+            setenv ("TZ", timezone, 1);
+            tzset ();
+        }
+    if (s_started)
+        {
+            return ESP_OK;
+        }
+
+    esp_sntp_config_t config
+        = ESP_NETIF_SNTP_DEFAULT_CONFIG (server != NULL ? server : TIME_SYNC_DEFAULT_SERVER);
+    config.sync_cb = time_sync_on_sync;
+
+    esp_err_t err = esp_netif_sntp_init (&config);
+    if (err != ESP_OK)
+        {
+            return err;
+        }
+    s_started = true;
+    return ESP_OK;
+}
+
+esp_err_t
+time_sync_wait_synced (uint32_t timeout_ms)
+{
+    if (s_synced)
+        {
+            return ESP_OK;
+        }
+    esp_err_t err = esp_netif_sntp_sync_wait (pdMS_TO_TICKS (timeout_ms));
+    if (err == ESP_OK)
+        {
+            s_synced = true;
+        }
+    return err;
+}
+
+bool
+time_sync_is_synced (void)
+{
+    return s_synced && time_sync_is_valid_epoch (time_sync_now ());
+}
+
+int64_t
+time_sync_now (void)
+{
+    time_t now = 0;
+    time (&now);
+    return (int64_t)now;
+}
+
+esp_err_t
+time_sync_get (char *out, size_t out_size)
+{
+    return time_format_iso8601 (time_sync_now (), out, out_size);
+}
+
+esp_err_t
+time_sync_get_local (char *out, size_t out_size)
+{
+    return time_format_iso8601_local (time_sync_now (), out, out_size);
+}

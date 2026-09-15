@@ -1,0 +1,22 @@
+# ESP-IDF build output
+build/
+*.bin
+*.elf
+*.map
+*.gcno
+*.gcda
+
+# Component Manager downloads (re-resolved from idf_component.yml)
+managed_components/
+
+# Generated configuration (defaults are tracked instead)
+sdkconfig
+sdkconfig.old
+
+# Local tooling and host-test helpers
+.tools/
+.vscode/
+.idea/
+
+# OS
+.DS_Store
