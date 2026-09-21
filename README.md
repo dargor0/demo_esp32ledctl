@@ -22,13 +22,24 @@ API / web UI**, synchronizes time via **NTP**, and is reachable through
   | Error        | Red          | Fast blink   |
   | Custom       | User-defined | User-defined |
 
-- **REST API + embedded web UI** for status, time, and LED control.
+- **REST API + embedded web UI** (separate `www/` HTML/CSS/JS files linked into
+  the firmware) for status, time, and LED control. The page renders a simulated
+  LED per LED, the device date/time, and a refresh-rate slider (500 ms–5 s).
+- **Multiple chained WS2812 LEDs** on one data line, addressed by ID (0 =
+  on-board), each independently custom-colorable via a per-ID or array API
+  (`CONFIG_APP_LED_COUNT`, 1–1024).
+- **Thread-safe public APIs**: components with shared mutable state serialize
+  access with mutexes (FR-9).
 - **NTP** time synchronization with configurable POSIX timezone.
 - **mDNS** hostname and `_http._tcp` service advertisement.
 - **BOOT button**: short press clears the custom LED state; long press erases
-  credentials and returns to provisioning (factory reset).
+  credentials and returns to provisioning (factory reset). Disabled in static
+  credentials mode.
+- **Static credentials mode** (`CONFIG_APP_WIFI_STATIC_CREDS`): connect with
+  fixed credentials and disable all reconfiguration (no BLE provisioning, no
+  `/api/wifi`, no BOOT factory reset).
 - Four FreeRTOS tasks pinned to cores: `prov_task`/`net_task` on core 0,
-  `led_task`/`button_task` on core 1.
+  `led_task`/`button_task` on core 1 (three tasks in static mode).
 
 ## Components
 
@@ -77,26 +88,44 @@ Run `idf.py menuconfig` → **Application Configuration**:
 | Option | Default | Description |
 |---|---|---|
 | `APP_SYSTEM_NAME` | `esp32ledctl` | BLE name, mDNS host, web title |
+| `APP_PROV_POP` | `abcd1234` | BLE provisioning proof-of-possession |
+| `APP_WIFI_STATIC_CREDS` | `n` | Fixed credentials; disables provisioning & reset |
+| `APP_WIFI_SSID` / `APP_WIFI_PASSWORD` | `""` | Static credentials (when enabled) |
 | `APP_RGB_GPIO` | `48` | RGB LED data GPIO |
+| `APP_LED_COUNT` | `1` | Number of chained WS2812 LEDs (1–1024) |
+| `APP_LED_TICK_MS` | `20` | LED render tick (>= `LED_COUNT * 30 us`) |
+| `APP_LED_MAX_BLINK_MS` | `60000` | Max custom blink period |
 | `APP_BOOT_GPIO` | `0` | BOOT button GPIO |
 | `APP_HTTP_PORT` | `80` | HTTP server port |
 | `APP_NTP_SERVER` | `pool.ntp.org` | NTP server |
 | `APP_TIMEZONE` | `UTC0` | POSIX timezone |
 | `APP_BUTTON_*` | | Debounce / long-press timing |
 | `APP_TASK_CORE_*` | 0/0/1/1 | Task core pinning |
+| `APP_TASK_STACK_*` | 4096/4096/3072/3072 | Task stack sizes (priorities fixed in code) |
 
 ## REST API
 
+The LED API is path-based. LED 0 is the on-board LED; chained LEDs ascend in
+signal order (`GET /api/led` returns the collection).
+
 | Method | Path | Description |
 |---|---|---|
-| GET  | `/` | Web UI (HTML) |
-| GET  | `/api/status` | System / WiFi / IP / uptime / heap |
+| GET  | `/` | Web UI (`www/index.html`) |
+| GET  | `/style.css`, `/app.js` | Web UI assets |
+| GET  | `/api/status` | State, WiFi, IP, uptime, heap, `led_count`, `last_button_event` |
 | GET  | `/api/time` | Sync state, epoch, ISO-8601 |
-| GET  | `/api/led` | Current LED state, color, blink, on |
-| POST | `/api/led` | Set custom LED: `{"r":0-255,"g":0-255,"b":0-255,"blink_ms":0-60000}` |
-| POST | `/api/led/clear` | Clear custom state (back to green) |
-| POST | `/api/restart` | Restart the device |
-| POST | `/api/reset` | Erase credentials and restart |
+| GET  | `/api/led` | `{"count":N,"leds":[{"id","state","r","g","b","blink_ms","on"},...]}` |
+| GET  | `/api/led/{id}` | One LED (404 if invalid) |
+| PUT  | `/api/led/{id}` | Set one LED: `{"r":0-255,"g":0-255,"b":0-255,"blink_ms":0-..}` (404/400/409) |
+| PUT  | `/api/led` | Set **all** (single object) or a **list** (`[{"id":..,...}, ...]`) |
+| DELETE | `/api/led/{id}` | Clear one LED (idempotent 200) |
+| DELETE | `/api/led` | Clear all; optional body `{"ids":[..]}` clears only those |
+| POST | `/api/wifi` | Erase stored credentials and re-enter provisioning (404 in static mode) |
+| POST | `/api/reset` | Restart the device |
+
+`POST` rejects a single `PUT /api/led` body that contains an `id` (the collection
+path *is* "all"). Set operations return `409 Conflict` when not connected and
+change no LED on invalid input (all-or-nothing).
 
 ## Testing and linting
 
@@ -109,8 +138,8 @@ Requires `clang-format`, `lizard`, `gcovr`, and the Linux host tools.
 ```
 
 Host unit tests run on the ESP-IDF Linux target with gcov coverage, enforced at
-**>= 50% per source file**. `tests/led_scan/` is a standalone RGB pin-scan
-utility used to locate the LED data GPIO.
+**>= 50% per host-compiled source file**. `tests/led_scan/` is a standalone RGB
+pin-scan utility used to locate the LED data GPIO.
 
 ## License
 

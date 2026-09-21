@@ -1,0 +1,156 @@
+:root {
+  --bg: #12151c;
+  --card: #1b202b;
+  --fg: #e7ecf3;
+  --muted: #8b97ab;
+  --accent: #3d7bff;
+  --ok: #35c26b;
+  --warn: #e0a02c;
+  --bad: #e04b4b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 1rem;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+h1 {
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+h2 {
+  font-size: 1rem;
+  margin: 0 0 0.75rem;
+}
+
+main {
+  max-width: 900px;
+  margin: 1rem auto;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.card {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.badge {
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  background: var(--muted);
+  color: #0d1016;
+}
+
+.badge-ok { background: var(--ok); }
+.badge-warn { background: var(--warn); }
+.badge-bad { background: var(--bad); }
+
+.sim-leds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.sim-led {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.led-dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #000;
+  border: 2px solid #2c3444;
+  transition: box-shadow 0.1s ease;
+}
+
+.field {
+  display: block;
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+input[type="color"] {
+  width: 48px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: none;
+  vertical-align: middle;
+}
+
+input[type="range"] {
+  width: 100%;
+}
+
+input[type="number"],
+select {
+  margin-left: 0.4rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid #2c3444;
+  background: #0f131b;
+  color: var(--fg);
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+button {
+  flex: 1;
+  padding: 0.55rem;
+  border: 1px solid #2c3444;
+  border-radius: 8px;
+  background: #232a38;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button:hover {
+  filter: brightness(1.1);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.time {
+  font-size: 1.4rem;
+  margin: 0.2rem 0;
+}

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LED Controller</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1 id="system-name">ESP32 LED Controller</h1>
+  <span id="conn" class="badge badge-warn">connecting…</span>
+</header>
+
+<main>
+  <section class="card">
+    <h2>LED status</h2>
+    <p id="led-summary">—</p>
+    <div id="sim-leds" class="sim-leds"></div>
+    <p class="muted" id="status-line"></p>
+  </section>
+
+  <section class="card">
+    <h2>Device time</h2>
+    <p id="device-time" class="time">—</p>
+    <p class="muted" id="sync-state"></p>
+  </section>
+
+  <section class="card">
+    <h2>LED control</h2>
+    <label class="field">Target
+      <select id="target"></select>
+    </label>
+    <label class="field">Color
+      <input type="color" id="color" value="#ff0000">
+    </label>
+    <label class="field">Red <input type="range" id="r" min="0" max="255" value="255"></label>
+    <label class="field">Green <input type="range" id="g" min="0" max="255" value="0"></label>
+    <label class="field">Blue <input type="range" id="b" min="0" max="255" value="0"></label>
+    <label class="field">Blink (ms, 0 = solid)
+      <input type="number" id="blink" min="0" max="60000" step="50" value="0">
+    </label>
+    <div class="actions">
+      <button id="apply" class="primary">Apply</button>
+      <button id="clear">Clear</button>
+    </div>
+    <p class="muted" id="control-result"></p>
+  </section>
+
+  <section class="card">
+    <h2>Refresh</h2>
+    <label class="field">Update interval: <span id="refresh-value">500 ms</span>
+      <input type="range" id="refresh" min="500" max="5000" step="100" value="500">
+    </label>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

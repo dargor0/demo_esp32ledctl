@@ -1,3 +1,17 @@
+/**
+ * @file storage_nvs.c
+ * @brief NVS-backed implementation of the storage backend vtable.
+ *
+ * SEQUENCE
+ * --------
+ * Each operation opens the NVS namespace, performs one primitive, commits when
+ * writing and closes the handle. This keeps the handle lifetime local to the
+ * call (no long-lived handle/lock). init() recovers a full or stale partition
+ * by erasing and re-initializing it.
+ *
+ * Error mapping: NVS "not found" -> ESP_ERR_NOT_FOUND, NVS "invalid length"
+ * -> ESP_ERR_INVALID_SIZE, so the core logic is backend-agnostic.
+ */
 #include "storage_backend.h"
 
 #include <string.h>

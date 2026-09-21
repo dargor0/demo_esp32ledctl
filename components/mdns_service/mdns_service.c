@@ -1,3 +1,17 @@
+/**
+ * @file mdns_service.c
+ * @brief mDNS glue: advertise "<system-name>.local" and the HTTP service.
+ *
+ * SEQUENCE
+ * --------
+ *   1. build the DNS-safe hostname and the service instance name from the
+ *      system name (pure helpers);
+ *   2. mdns_init();
+ *   3. set the hostname and instance name;
+ *   4. register the "_http._tcp" service on the HTTP port.
+ *
+ * Started once, after the network interface has a valid IP.
+ */
 #include "mdns_service.h"
 
 #include <string.h>

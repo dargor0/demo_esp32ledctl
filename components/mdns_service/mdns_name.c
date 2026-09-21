@@ -1,3 +1,26 @@
+/**
+ * @file mdns_name.c
+ * @brief Pure system-name -> mDNS name conversion.
+ *
+ * HOSTNAME ALGORITHM
+ * ------------------
+ *   1. Choose the source: the configured system name, or the built-in default
+ *      when the name is NULL/empty.
+ *   2. Sanitize it into a DNS-safe label (<= 63 chars):
+ *        - uppercase        -> lowercase
+ *        - [a-z0-9-]        -> kept
+ *        - anything else    -> '-'
+ *        - a leading '-'    -> dropped
+ *        - trailing '-'s    -> trimmed
+ *   3. If sanitization produced an empty label (e.g. "@@@"), fall back to the
+ *      sanitized default.
+ *   4. Check the caller's buffer has room for the label + ".local" + NUL, then
+ *      concatenate.
+ *
+ * INSTANCE NAME: the raw configured text (not sanitized), or the default.
+ *
+ * No hardware dependency, so it is host-tested.
+ */
 #include "mdns_name.h"
 
 #include <string.h>
@@ -27,6 +50,9 @@ mdns_normalize_char (char c)
 /**
  * @brief Sanitize a system name into a DNS label.
  *
+ * Sequence: map each character, skip leading '-', truncate at `max`, then trim
+ * trailing '-' and NUL-terminate.
+ *
  * @param src  Source string.
  * @param out  Destination label buffer.
  * @param max  Maximum label length.
@@ -55,6 +81,12 @@ mdns_sanitize (const char *src, char *out, size_t max)
     return length;
 }
 
+/**
+ * @brief Build "<label>.local" from the system name.
+ *
+ * See the file header for the full sequence; returns ESP_ERR_INVALID_SIZE when
+ * the caller's buffer is too small.
+ */
 esp_err_t
 mdns_build_hostname (const char *system_name, char *out, size_t out_size)
 {
@@ -88,6 +120,12 @@ mdns_build_hostname (const char *system_name, char *out, size_t out_size)
     return ESP_OK;
 }
 
+/**
+ * @brief Build the service instance name from the system name.
+ *
+ * The instance name is not DNS-constrained, so the configured text is copied
+ * verbatim (or the default), bounded by the caller's buffer.
+ */
 esp_err_t
 mdns_build_instance_name (const char *system_name, char *out, size_t out_size)
 {

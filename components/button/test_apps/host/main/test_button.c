@@ -106,6 +106,15 @@ TEST_CASE ("null pointers are handled safely", "[button]")
     TEST_ASSERT_EQUAL_INT (BUTTON_EVENT_NONE, button_sm_process (NULL, true, 0));
 }
 
+TEST_CASE ("event names are human readable", "[button]")
+{
+    TEST_ASSERT_EQUAL_STRING ("none", button_event_name (BUTTON_EVENT_NONE));
+    TEST_ASSERT_EQUAL_STRING ("pressed", button_event_name (BUTTON_EVENT_PRESSED));
+    TEST_ASSERT_EQUAL_STRING ("short_press", button_event_name (BUTTON_EVENT_SHORT_PRESS));
+    TEST_ASSERT_EQUAL_STRING ("long_press", button_event_name (BUTTON_EVENT_LONG_PRESS));
+    TEST_ASSERT_EQUAL_STRING ("released", button_event_name (BUTTON_EVENT_RELEASED));
+}
+
 void
 app_main (void)
 {

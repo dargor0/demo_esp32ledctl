@@ -1,3 +1,19 @@
+/**
+ * @file time_sync.c
+ * @brief SNTP glue with thread-safe sync/started flags.
+ *
+ * SEQUENCE
+ * --------
+ *   time_sync_start(): apply TZ once, then (first call only) start SNTP with the
+ *     configured server and a sync callback.
+ *   The SNTP callback sets `synced` under a critical section.
+ *   time_sync_wait_synced(): return immediately if already synced, else block on
+ *     the SNTP wait primitive and latch `synced`.
+ *   is_synced() = synced && the current clock is past the validity threshold.
+ *
+ * The critical section guards the two booleans shared between the SNTP callback
+ * task and the HTTP task.
+ */
 #include "time_sync.h"
 
 #include <stdlib.h>
@@ -12,6 +28,37 @@ static const char *TAG = "time_sync";
 
 static bool s_synced;
 static bool s_started;
+static portMUX_TYPE s_flags_lock = portMUX_INITIALIZER_UNLOCKED;
+
+/** @brief Set the synchronized flag under a critical section. */
+static void
+time_sync_set_synced (bool synced)
+{
+    portENTER_CRITICAL (&s_flags_lock);
+    s_synced = synced;
+    portEXIT_CRITICAL (&s_flags_lock);
+}
+
+/** @brief Read the synchronized flag under a critical section. */
+static bool
+time_sync_get_synced (void)
+{
+    portENTER_CRITICAL (&s_flags_lock);
+    bool synced = s_synced;
+    portEXIT_CRITICAL (&s_flags_lock);
+    return synced;
+}
+
+/** @brief Read/modify the started flag under a critical section. */
+static bool
+time_sync_take_started (void)
+{
+    portENTER_CRITICAL (&s_flags_lock);
+    bool already = s_started;
+    s_started = true;
+    portEXIT_CRITICAL (&s_flags_lock);
+    return already;
+}
 
 /**
  * @brief SNTP synchronization callback.
@@ -22,7 +69,7 @@ static void
 time_sync_on_sync (struct timeval *tv)
 {
     (void)tv;
-    s_synced = true;
+    time_sync_set_synced (true);
     ESP_LOGI (TAG, "time synchronized");
 }
 
@@ -34,7 +81,7 @@ time_sync_start (const char *server, const char *timezone)
             setenv ("TZ", timezone, 1);
             tzset ();
         }
-    if (s_started)
+    if (time_sync_take_started ())
         {
             return ESP_OK;
         }
@@ -48,21 +95,20 @@ time_sync_start (const char *server, const char *timezone)
         {
             return err;
         }
-    s_started = true;
     return ESP_OK;
 }
 
 esp_err_t
 time_sync_wait_synced (uint32_t timeout_ms)
 {
-    if (s_synced)
+    if (time_sync_get_synced ())
         {
             return ESP_OK;
         }
     esp_err_t err = esp_netif_sntp_sync_wait (pdMS_TO_TICKS (timeout_ms));
     if (err == ESP_OK)
         {
-            s_synced = true;
+            time_sync_set_synced (true);
         }
     return err;
 }
@@ -70,7 +116,7 @@ time_sync_wait_synced (uint32_t timeout_ms)
 bool
 time_sync_is_synced (void)
 {
-    return s_synced && time_sync_is_valid_epoch (time_sync_now ());
+    return time_sync_get_synced () && time_sync_is_valid_epoch (time_sync_now ());
 }
 
 int64_t

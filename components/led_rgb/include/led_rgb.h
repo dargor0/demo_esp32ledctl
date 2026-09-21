@@ -1,26 +1,24 @@
 /**
  * @file led_rgb.h
- * @brief RGB LED state machine for the ESP32-S3 DevKit.
+ * @brief RGB LED state machine for one or more chained WS2812 LEDs.
  *
- * The LED reflects the device connection state using distinct colors and blink
- * patterns:
- *   - provisioning : slow blue blink
- *   - connecting   : fast amber blink
- *   - connected    : solid green
- *   - error        : fast red blink
- *   - custom       : web-controlled color and blink rate
- *
- * The custom state can only be entered while the device is connected. A BOOT
- * short press or an explicit call to led_rgb_clear_custom() returns the LED to
- * the solid green connected state.
+ * LEDs are addressed by a zero-based ID (0 = the on-board LED, nearest the data
+ * GPIO). The LED follows the device connection state by default; each LED may
+ * independently hold a web-controlled custom color/blink.
  *
  * The state machine is pure logic: it never touches hardware. A sink callback
- * (see led_rgb_set_sink()) receives the resolved output each render, allowing
- * the RMT driver or a test double to consume it.
+ * (see led_rgb_set_sink()) receives the resolved frame for the whole chain on
+ * every render, allowing the RMT driver or a test double to consume it.
+ *
+ * All public functions are safe to call concurrently from different tasks and
+ * are internally serialized by a recursive mutex (a no-op shim on the host).
  */
 #pragma once
 
+#include "sdkconfig.h"
+
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "esp_err.h"
@@ -30,12 +28,33 @@ extern "C"
 {
 #endif
 
-/** @brief Default slow blink period in milliseconds (~1 Hz). */
-#define LED_RGB_SLOW_BLINK_MS 500
-/** @brief Default fast blink period in milliseconds (~5 Hz). */
-#define LED_RGB_FAST_BLINK_MS 100
-/** @brief Largest accepted custom blink period in milliseconds. */
+/*
+ * Compile-time configuration. When built as part of the application these come
+ * from Kconfig; the fallbacks keep the component self-contained for host tests.
+ */
+#ifdef CONFIG_APP_LED_COUNT
+#define LED_RGB_COUNT CONFIG_APP_LED_COUNT
+#else
+#define LED_RGB_COUNT 1
+#endif
+
+#ifdef CONFIG_APP_LED_MAX_BLINK_MS
+#define LED_RGB_MAX_BLINK_MS CONFIG_APP_LED_MAX_BLINK_MS
+#else
 #define LED_RGB_MAX_BLINK_MS 60000
+#endif
+
+#ifdef CONFIG_APP_LED_SLOW_BLINK_MS
+#define LED_RGB_SLOW_BLINK_MS CONFIG_APP_LED_SLOW_BLINK_MS
+#else
+#define LED_RGB_SLOW_BLINK_MS 500
+#endif
+
+#ifdef CONFIG_APP_LED_FAST_BLINK_MS
+#define LED_RGB_FAST_BLINK_MS CONFIG_APP_LED_FAST_BLINK_MS
+#else
+#define LED_RGB_FAST_BLINK_MS 100
+#endif
 
     /** @brief LED operating states. */
     typedef enum
@@ -56,7 +75,7 @@ extern "C"
         uint8_t b; /**< Blue channel. */
     } led_rgb_color_t;
 
-    /** @brief Resolved LED output for a point in time. */
+    /** @brief Resolved output for a single LED at a point in time. */
     typedef struct
     {
         led_rgb_state_t state; /**< State that produced this output. */
@@ -65,12 +84,21 @@ extern "C"
         bool on;               /**< Whether the LED is lit at this instant. */
     } led_rgb_output_t;
 
+    /** @brief A custom command targeting one LED. */
+    typedef struct
+    {
+        uint16_t id;           /**< LED ID, 0 .. LED_RGB_COUNT-1. */
+        led_rgb_color_t color; /**< Target color. */
+        uint32_t blink_ms;     /**< Blink period, 0 means solid. */
+    } led_rgb_cmd_t;
+
     /**
-     * @brief Callback receiving the resolved output on every render.
+     * @brief Sink callback receiving the resolved frame for the whole chain.
      *
-     * @param out  Resolved output; valid only for the duration of the call.
+     * @param frame  Resolved outputs, one per LED in ID order.
+     * @param count  Number of entries in @p frame (LED_RGB_COUNT).
      */
-    typedef void (*led_rgb_sink_t) (const led_rgb_output_t *out);
+    typedef void (*led_rgb_sink_t) (const led_rgb_output_t *frame, size_t count);
 
     /**
      * @brief Reset the state machine to its power-on defaults.
@@ -85,64 +113,93 @@ extern "C"
     void led_rgb_set_sink (led_rgb_sink_t sink);
 
     /**
-     * @brief Set the automatic state.
+     * @brief Set the automatic state for all LEDs, clearing custom overrides.
      *
-     * Setting any state other than LED_RGB_STATE_CUSTOM clears a custom override.
-     * Out-of-range values are ignored.
+     * Out-of-range values and LED_RGB_STATE_CUSTOM are ignored.
      *
      * @param state  Target automatic state.
      */
     void led_rgb_set_state (led_rgb_state_t state);
 
     /**
-     * @brief Get the current state.
+     * @brief Get the state of one LED (LED_RGB_STATE_CUSTOM if overridden).
      *
-     * @return The current LED state.
+     * @param id  LED ID.
+     * @return The LED state, or LED_RGB_STATE_ERROR if the id is invalid.
      */
-    led_rgb_state_t led_rgb_get_state (void);
+    led_rgb_state_t led_rgb_get_state (uint16_t id);
 
     /**
-     * @brief Enter the custom state with a user color and blink rate.
+     * @brief Get the number of LEDs in the chain.
      *
-     * Only allowed while the current state is LED_RGB_STATE_CONNECTED.
-     *
-     * @param color     Desired color.
-     * @param blink_ms  Blink period in milliseconds; 0 means solid.
-     * @return
-     *   - ESP_OK on success.
-     *   - ESP_ERR_INVALID_STATE if the device is not connected.
-     *   - ESP_ERR_INVALID_ARG if blink_ms exceeds LED_RGB_MAX_BLINK_MS.
+     * @return LED_RGB_COUNT.
      */
-    esp_err_t led_rgb_set_custom (led_rgb_color_t color, uint32_t blink_ms);
+    size_t led_rgb_get_count (void);
 
     /**
-     * @brief Clear a custom override and return to the connected state.
+     * @brief Set one LED to a custom color and blink rate.
      *
-     * @return
-     *   - ESP_OK on success.
-     *   - ESP_ERR_INVALID_STATE if the LED is not currently custom.
+     * @return ESP_OK, ESP_ERR_INVALID_ARG (bad id/blink) or
+     *         ESP_ERR_INVALID_STATE (not connected).
      */
-    esp_err_t led_rgb_clear_custom (void);
+    esp_err_t led_rgb_set_custom (uint16_t id, led_rgb_color_t color, uint32_t blink_ms);
 
     /**
-     * @brief Check whether the custom state is active.
+     * @brief Set several LEDs from an array of commands (atomic, all-or-nothing).
      *
-     * @return true if the LED is in the custom state.
+     * @return ESP_OK, ESP_ERR_INVALID_ARG or ESP_ERR_INVALID_STATE.
      */
-    bool led_rgb_is_custom (void);
+    esp_err_t led_rgb_set_custom_many (const led_rgb_cmd_t *cmds, size_t count);
 
     /**
-     * @brief Resolve the output for a given time without invoking the sink.
+     * @brief Apply the same custom color/blink to every LED (atomic).
      *
-     * @param now_ms  Monotonic time in milliseconds used for blink evaluation.
-     * @param out     Destination for the resolved output; must not be NULL.
+     * @return ESP_OK, ESP_ERR_INVALID_ARG or ESP_ERR_INVALID_STATE.
      */
-    void led_rgb_get_output (uint32_t now_ms, led_rgb_output_t *out);
+    esp_err_t led_rgb_set_custom_all (led_rgb_color_t color, uint32_t blink_ms);
 
     /**
-     * @brief Resolve the output and forward it to the registered sink.
+     * @brief Clear the custom override of one LED.
      *
-     * @param now_ms  Monotonic time in milliseconds used for blink evaluation.
+     * @return ESP_OK, or ESP_ERR_INVALID_ARG if the id is invalid.
+     */
+    esp_err_t led_rgb_clear_custom (uint16_t id);
+
+    /**
+     * @brief Clear the custom overrides of the listed LEDs (atomic).
+     *
+     * @return ESP_OK, or ESP_ERR_INVALID_ARG if any id is invalid.
+     */
+    esp_err_t led_rgb_clear_custom_many (const uint16_t *ids, size_t count);
+
+    /**
+     * @brief Clear the custom override of every LED.
+     *
+     * @return ESP_OK.
+     */
+    esp_err_t led_rgb_clear_custom_all (void);
+
+    /**
+     * @brief Check whether a LED is in the custom state.
+     *
+     * @param id  LED ID.
+     * @return true if the LED has a custom override.
+     */
+    bool led_rgb_is_custom (uint16_t id);
+
+    /**
+     * @brief Resolve one LED's output for a given time (no sink call).
+     *
+     * @param id      LED ID.
+     * @param now_ms  Monotonic time in milliseconds.
+     * @param out     Destination; must not be NULL.
+     */
+    void led_rgb_get_output (uint16_t id, uint32_t now_ms, led_rgb_output_t *out);
+
+    /**
+     * @brief Resolve the whole chain and forward it to the registered sink.
+     *
+     * @param now_ms  Monotonic time in milliseconds.
      */
     void led_rgb_render (uint32_t now_ms);
 

@@ -7,12 +7,67 @@ menu "Application Configuration"
             Single identity used for the BLE provisioning advertisement/device
             name, the mDNS hostname (<system_name>.local) and the web UI title.
 
+    config APP_PROV_POP
+        string "BLE provisioning proof-of-possession"
+        default "abcd1234"
+        help
+            Proof-of-possession required by the provisioning app when using the
+            Security 1 BLE scheme.
+
+    config APP_WIFI_STATIC_CREDS
+        bool "Use static WiFi credentials (disable provisioning)"
+        default n
+        help
+            When enabled the firmware connects using CONFIG_APP_WIFI_SSID and
+            CONFIG_APP_WIFI_PASSWORD and all reconfiguration paths are disabled:
+            BLE provisioning is not built, POST /api/wifi is not registered, and
+            the BOOT long-press factory reset is a no-op.
+
+    config APP_WIFI_SSID
+        string "Static WiFi SSID"
+        default ""
+        depends on APP_WIFI_STATIC_CREDS
+
+    config APP_WIFI_PASSWORD
+        string "Static WiFi password"
+        default ""
+        depends on APP_WIFI_STATIC_CREDS
+
     config APP_RGB_GPIO
         int "RGB LED data GPIO"
         default 48
         help
             GPIO connected to the on-board addressable RGB LED. Common values
             are 48 (ESP32-S3-DevKitC-1 v1.1) and 38 (v1.0).
+
+    config APP_LED_COUNT
+        int "Number of chained WS2812 LEDs"
+        default 1
+        range 1 1024
+        help
+            Compile-time number of addressable LEDs on the data line (includes
+            the on-board LED as ID 0). Statically allocates ~96 bytes per LED
+            for the RMT symbol buffer plus per-LED state. A build-time assertion
+            requires LED_COUNT * 30 us <= APP_LED_TICK_MS.
+
+    config APP_LED_TICK_MS
+        int "LED render tick in milliseconds"
+        default 20
+        range 5 1000
+        help
+            Must be at least APP_LED_COUNT * 30 us (the frame time).
+
+    config APP_LED_SLOW_BLINK_MS
+        int "Slow blink period (ms)"
+        default 500
+
+    config APP_LED_FAST_BLINK_MS
+        int "Fast blink period (ms)"
+        default 100
+
+    config APP_LED_MAX_BLINK_MS
+        int "Maximum custom blink period (ms)"
+        default 60000
 
     config APP_BOOT_GPIO
         int "BOOT button GPIO"
@@ -30,11 +85,6 @@ menu "Application Configuration"
     config APP_TIMEZONE
         string "POSIX timezone string"
         default "UTC0"
-
-    config APP_LED_TICK_MS
-        int "LED render tick in milliseconds"
-        default 20
-        range 5 1000
 
     config APP_BUTTON_DEBOUNCE_MS
         int "Button debounce in milliseconds"
@@ -63,5 +113,21 @@ menu "Application Configuration"
         int "Button task core"
         default 1
         range 0 1
+
+    config APP_TASK_STACK_PROV
+        int "Provisioning task stack size"
+        default 4096
+
+    config APP_TASK_STACK_NET
+        int "Network task stack size"
+        default 4096
+
+    config APP_TASK_STACK_LED
+        int "LED task stack size"
+        default 3072
+
+    config APP_TASK_STACK_BUTTON
+        int "Button task stack size"
+        default 3072
 
 endmenu

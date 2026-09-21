@@ -17,6 +17,8 @@
  */
 #pragma once
 
+#include "sdkconfig.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -63,6 +65,22 @@ extern "C"
      * @param user_data  Opaque pointer passed to button_start().
      */
     typedef void (*button_event_cb_t) (button_event_t event, void *user_data);
+
+    /**
+     * @brief Get the human-readable name of an event.
+     *
+     * @param event  Button event.
+     * @return Static string ("none", "pressed", "short_press", "long_press",
+     *         "released").
+     */
+    const char *button_event_name (button_event_t event);
+
+    /**
+     * @brief Get the most recent button event (thread-safe).
+     *
+     * @return The last event, or BUTTON_EVENT_NONE if none has occurred.
+     */
+    button_event_t button_get_last_event (void);
 
     /**
      * @brief Configure the BOOT GPIO and start the button polling task.
